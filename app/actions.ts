@@ -1,0 +1,184 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { isValidMember, isValidRoom } from "@/lib/config";
+import { formatTime, isWorkingDate } from "@/lib/dates";
+import { sql } from "@/lib/db";
+
+export type ActionResult = { ok: true } | { ok: false; message: string };
+
+type Input = { room: string; date: string; actor: string };
+
+type CurrentRow = {
+  placed_by: string | null;
+  placed_at: string | Date | null;
+  picked_by: string | null;
+  picked_at: string | Date | null;
+};
+
+function validate({ room, date, actor }: Input): string | null {
+  if (!isValidRoom(room)) return "รหัสห้องไม่ถูกต้อง";
+  if (!isWorkingDate(date)) return "วันที่อยู่นอกช่วงงาน";
+  if (!isValidMember(actor)) return "กรุณาเลือกชื่อของคุณก่อน";
+  return null;
+}
+
+async function current(room: string, date: string): Promise<CurrentRow | null> {
+  const rows = (await sql().query(
+    `SELECT placed_by, placed_at, picked_by, picked_at
+       FROM room_day WHERE room_code = $1 AND work_date = $2::date`,
+    [room, date],
+  )) as CurrentRow[];
+  return rows[0] ?? null;
+}
+
+function at(value: string | Date | null): string {
+  return value ? formatTime(new Date(value).toISOString()) : "";
+}
+
+/** Mark the document as placed. The first person to tap wins. */
+export async function placeDocument(input: Input): Promise<ActionResult> {
+  const error = validate(input);
+  if (error) return { ok: false, message: error };
+  const { room, date, actor } = input;
+
+  // Upsert so a missing seed row is created, but only take the "placed" slot
+  // when it is still empty. 0 rows returned means someone else was first.
+  const changed = await sql().query(
+    `WITH changed AS (
+       INSERT INTO room_day (room_code, work_date, placed_by, placed_at)
+       VALUES ($1, $2::date, $3, now())
+       ON CONFLICT (room_code, work_date) DO UPDATE
+         SET placed_by = EXCLUDED.placed_by, placed_at = now(), updated_at = now()
+         WHERE room_day.placed_at IS NULL
+       RETURNING room_code, work_date
+     )
+     INSERT INTO activity_log (room_code, work_date, action, actor)
+     SELECT room_code, work_date, 'place', $3 FROM changed
+     RETURNING id`,
+    [room, date, actor],
+  );
+
+  if (changed.length === 0) {
+    const row = await current(room, date);
+    revalidatePath("/");
+    return {
+      ok: false,
+      message: row?.placed_by
+        ? `ห้อง ${room} วางแล้วโดย ${row.placed_by} เมื่อ ${at(row.placed_at)}`
+        : `ห้อง ${room} ถูกอัปเดตไปแล้ว กรุณาลองใหม่`,
+    };
+  }
+  revalidatePath("/");
+  return { ok: true };
+}
+
+/** Mark the document as picked up. Requires it to have been placed first. */
+export async function pickupDocument(input: Input): Promise<ActionResult> {
+  const error = validate(input);
+  if (error) return { ok: false, message: error };
+  const { room, date, actor } = input;
+
+  const changed = await sql().query(
+    `WITH changed AS (
+       UPDATE room_day
+          SET picked_by = $3, picked_at = now(), updated_at = now()
+        WHERE room_code = $1 AND work_date = $2::date
+          AND placed_at IS NOT NULL AND picked_at IS NULL
+       RETURNING room_code, work_date
+     )
+     INSERT INTO activity_log (room_code, work_date, action, actor)
+     SELECT room_code, work_date, 'pickup', $3 FROM changed
+     RETURNING id`,
+    [room, date, actor],
+  );
+
+  if (changed.length === 0) {
+    const row = await current(room, date);
+    revalidatePath("/");
+    if (row?.picked_by) {
+      return {
+        ok: false,
+        message: `ห้อง ${room} เก็บแล้วโดย ${row.picked_by} เมื่อ ${at(row.picked_at)}`,
+      };
+    }
+    return { ok: false, message: `ห้อง ${room} ยังไม่ได้วางเอกสาร` };
+  }
+  revalidatePath("/");
+  return { ok: true };
+}
+
+/** Revert "placed" (only while not yet picked up). */
+export async function undoPlace(input: Input): Promise<ActionResult> {
+  const error = validate(input);
+  if (error) return { ok: false, message: error };
+  const { room, date, actor } = input;
+
+  const changed = await sql().query(
+    `WITH changed AS (
+       UPDATE room_day
+          SET placed_by = NULL, placed_at = NULL, updated_at = now()
+        WHERE room_code = $1 AND work_date = $2::date
+          AND placed_at IS NOT NULL AND picked_at IS NULL
+       RETURNING room_code, work_date
+     )
+     INSERT INTO activity_log (room_code, work_date, action, actor)
+     SELECT room_code, work_date, 'undo_place', $3 FROM changed
+     RETURNING id`,
+    [room, date, actor],
+  );
+  revalidatePath("/");
+  if (changed.length === 0) {
+    return { ok: false, message: `สถานะห้อง ${room} เปลี่ยนไปแล้ว กรุณาดูข้อมูลล่าสุด` };
+  }
+  return { ok: true };
+}
+
+/** Revert "picked up"; the room goes back to "placed". */
+export async function undoPickup(input: Input): Promise<ActionResult> {
+  const error = validate(input);
+  if (error) return { ok: false, message: error };
+  const { room, date, actor } = input;
+
+  const changed = await sql().query(
+    `WITH changed AS (
+       UPDATE room_day
+          SET picked_by = NULL, picked_at = NULL, updated_at = now()
+        WHERE room_code = $1 AND work_date = $2::date AND picked_at IS NOT NULL
+       RETURNING room_code, work_date
+     )
+     INSERT INTO activity_log (room_code, work_date, action, actor)
+     SELECT room_code, work_date, 'undo_pickup', $3 FROM changed
+     RETURNING id`,
+    [room, date, actor],
+  );
+  revalidatePath("/");
+  if (changed.length === 0) {
+    return { ok: false, message: `สถานะห้อง ${room} เปลี่ยนไปแล้ว กรุณาดูข้อมูลล่าสุด` };
+  }
+  return { ok: true };
+}
+
+/** Save a free-text note on the room for that day (empty clears it). */
+export async function saveNote(input: Input & { note: string }): Promise<ActionResult> {
+  const error = validate(input);
+  if (error) return { ok: false, message: error };
+  const { room, date, actor } = input;
+  const note = input.note.trim().slice(0, 500);
+
+  await sql().query(
+    `WITH changed AS (
+       INSERT INTO room_day (room_code, work_date, note)
+       VALUES ($1, $2::date, NULLIF($3, ''))
+       ON CONFLICT (room_code, work_date) DO UPDATE
+         SET note = NULLIF($3, ''), updated_at = now()
+       RETURNING room_code, work_date
+     )
+     INSERT INTO activity_log (room_code, work_date, action, actor, note)
+     SELECT room_code, work_date, 'note', $4, NULLIF($3, '') FROM changed
+     RETURNING id`,
+    [room, date, note, actor],
+  );
+  revalidatePath("/");
+  return { ok: true };
+}

@@ -1,0 +1,14 @@
+{
+  "name": "เอกสารห้อง G01–G21",
+  "short_name": "เอกสารห้อง",
+  "description": "บันทึกการวางและเก็บเอกสารแต่ละห้อง",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fafafa",
+  "theme_color": "#1e3a8a",
+  "lang": "th",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "/apple-icon", "sizes": "180x180", "type": "image/png" }
+  ]
+}
