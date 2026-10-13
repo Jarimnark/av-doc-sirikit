@@ -11,12 +11,12 @@ A small, phone-first web app for a 3-person team (นับทอง, หมิ�
 - **21 rooms**: `G01` – `G21`.
 - Every room gets **one document per day**; each has to be **placed** and later **picked up**.
 - **3 people** share the walking. Without a shared record, two people can end up going to the same room while another gets missed.
-- The work runs **13 – 18 Oct 2026**: 6 days × 21 rooms = **126 room-days**.
+- The work runs **13 – 20 Oct 2026**: 8 days × 21 rooms = **168 room-days**.
 
 ## What the app does
 
 1. **Who are you?** On first visit, tap your name (นับทอง / หมิว / รัน). It is remembered on that phone and can be changed from the button in the header.
-2. **Pick the day.** The app opens on today (Asia/Bangkok). The day strip lets you review or fix any day from 13 to 18 Oct.
+2. **Pick the day.** The app opens on today (Asia/Bangkok). The day strip lets you review or fix any day from 13 to 20 Oct.
 3. **See every room at once.** 21 room cards, colour-coded:
 
    | Status      | Thai label | Meaning                                       | Colour |
@@ -62,7 +62,7 @@ lib/
 db/
   schema.sql          # tables
 scripts/
-  migrate.ts          # creates tables and seeds G01–G21 × 13–18 Oct (idempotent)
+  migrate.ts          # creates tables and seeds G01–G21 × 13–20 Oct (idempotent)
 public/
   manifest.webmanifest
 ```
@@ -122,7 +122,7 @@ Copy `.env.example` to `.env.local` for local development. On Vercel, set the sa
 | `DATABASE_URL` | —                      | Required. Set automatically by the Neon integration |
 | `TEAM_MEMBERS` | `นับทอง,หมิว,รัน`       | Comma-separated names for the chooser              |
 | `START_DATE`   | `2026-10-13`           | First working day                                  |
-| `END_DATE`     | `2026-10-18`           | Last working day                                   |
+| `END_DATE`     | `2026-10-20`           | Last working day                                   |
 | `ROOM_PREFIX`  | `G`                    |                                                    |
 | `ROOM_COUNT`   | `21`                   | Rooms are `G01` … `G21`                            |
 | `TIMEZONE`     | `Asia/Bangkok`         | Decides "today" and how times are shown            |
@@ -134,7 +134,7 @@ Copy `.env.example` to `.env.local` for local development. On Vercel, set the sa
 ```bash
 npm install
 cp .env.example .env.local        # fill in DATABASE_URL from your Neon project
-npm run db:migrate                # creates tables + seeds 21 rooms × 6 days (safe to re-run)
+npm run db:migrate                # creates tables + seeds 21 rooms × 8 days (safe to re-run)
 npm run dev
 ```
 
@@ -159,7 +159,7 @@ Other scripts: `npm run build`, `npm run start`, `npm run lint`, `npm run typech
 
 ## Security note
 
-There is no authentication by design, because only 3 trusted people use the app for 6 days. Anyone with the URL can view and change statuses, so:
+There is no authentication by design, because only 3 trusted people use the app for 8 days. Anyone with the URL can view and change statuses, so:
 
 - Keep the URL private; a non-obvious Vercel project name helps.
 - If the link might spread, turn on Vercel **Deployment Protection → Password Protection** (Pro) or put it behind a shared passcode.

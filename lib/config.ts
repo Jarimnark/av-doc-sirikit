@@ -17,7 +17,7 @@ export const TEAM_MEMBERS: readonly string[] = env(
 
 /** First and last working day, inclusive (YYYY-MM-DD). */
 export const START_DATE = env("START_DATE", "2026-10-13");
-export const END_DATE = env("END_DATE", "2026-10-18");
+export const END_DATE = env("END_DATE", "2026-10-20");
 
 /** Rooms are G01 … G21. */
 export const ROOM_PREFIX = env("ROOM_PREFIX", "G");
