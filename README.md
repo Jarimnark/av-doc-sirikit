@@ -1,4 +1,4 @@
-# AV Doc Sirikit — เอกสารห้อง G01–G21
+# AV Doc Sirikit — เอกสารห้อง G01–G22
 
 A small, phone-first web app for a 3-person team (นับทอง, หมิว, รัน) that delivers and collects documents across 21 rooms of a large hall. It shows, at a glance, which rooms already have today's document **placed** and which have been **picked up**, so nobody walks to a room someone else has already handled.
 
@@ -8,7 +8,7 @@ A small, phone-first web app for a 3-person team (นับทอง, หมิ�
 
 ## The problem
 
-- **21 rooms**: `G01` – `G21`.
+- **21 rooms**: `G01` – `G22`, except `G18` (not part of the round).
 - Every room gets **one document per day**; each has to be **placed** and later **picked up**.
 - **3 people** share the walking. Without a shared record, two people can end up going to the same room while another gets missed.
 - The work runs **13 – 20 Oct 2026**: 8 days × 21 rooms = **168 room-days**.
@@ -62,7 +62,7 @@ lib/
 db/
   schema.sql          # tables
 scripts/
-  migrate.ts          # creates tables and seeds G01–G21 × 13–20 Oct (idempotent)
+  migrate.ts          # creates tables and seeds the rooms × 13–20 Oct (idempotent)
 public/
   manifest.webmanifest
 ```
@@ -123,8 +123,7 @@ Copy `.env.example` to `.env.local` for local development. On Vercel, set the sa
 | `TEAM_MEMBERS` | `นับทอง,หมิว,รัน`       | Comma-separated names for the chooser              |
 | `START_DATE`   | `2026-10-13`           | First working day                                  |
 | `END_DATE`     | `2026-10-20`           | Last working day                                   |
-| `ROOM_PREFIX`  | `G`                    |                                                    |
-| `ROOM_COUNT`   | `21`                   | Rooms are `G01` … `G21`                            |
+| `ROOMS`        | `G01,…,G17,G19,…,G22`  | Comma-separated room codes in display order (G18 excluded) |
 | `TIMEZONE`     | `Asia/Bangkok`         | Decides "today" and how times are shown            |
 
 `NEON_FETCH_ENDPOINT` exists only for local testing against a stand-in HTTP endpoint; leave it unset in production.

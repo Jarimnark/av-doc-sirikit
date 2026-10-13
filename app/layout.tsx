@@ -9,7 +9,7 @@ const notoThai = Noto_Sans_Thai({
 });
 
 export const metadata: Metadata = {
-  title: "เอกสารห้อง G01–G21",
+  title: "เอกสารห้อง G01–G22",
   description:
     "บันทึกการวางและเก็บเอกสารแต่ละห้อง เพื่อไม่ให้ทำงานซ้ำกัน",
   manifest: "/manifest.webmanifest",

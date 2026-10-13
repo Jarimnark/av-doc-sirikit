@@ -19,17 +19,17 @@ export const TEAM_MEMBERS: readonly string[] = env(
 export const START_DATE = env("START_DATE", "2026-10-13");
 export const END_DATE = env("END_DATE", "2026-10-20");
 
-/** Rooms are G01 … G21. */
-export const ROOM_PREFIX = env("ROOM_PREFIX", "G");
-export const ROOM_COUNT = Number(env("ROOM_COUNT", "21"));
-
 /** Used to decide what "today" is and to display times. */
 export const TIMEZONE = env("TIMEZONE", "Asia/Bangkok");
 
-export const ROOM_CODES: readonly string[] = Array.from(
-  { length: ROOM_COUNT },
-  (_, i) => `${ROOM_PREFIX}${String(i + 1).padStart(2, "0")}`,
-);
+/** The rooms, in display order. G18 is not part of the round; G22 is. */
+export const ROOM_CODES: readonly string[] = env(
+  "ROOMS",
+  "G01,G02,G03,G04,G05,G06,G07,G08,G09,G10,G11,G12,G13,G14,G15,G16,G17,G19,G20,G21,G22",
+)
+  .split(",")
+  .map((s) => s.trim().toUpperCase())
+  .filter(Boolean);
 
 export function isValidRoom(code: string): boolean {
   return ROOM_CODES.includes(code);

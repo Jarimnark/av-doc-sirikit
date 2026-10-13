@@ -230,7 +230,7 @@ export default function Board({ date, today, dates, rooms, log, members, timezon
       {/* Header */}
       <header className="flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-lg font-semibold leading-tight">เอกสารห้อง G01–G21</h1>
+          <h1 className="text-lg font-semibold leading-tight">เอกสารห้อง G01–G22</h1>
           <p className="text-xs text-zinc-500">
             {lastRefresh ? `อัปเดตล่าสุด ${lastRefresh}` : "อัปเดตอัตโนมัติทุก 7 วินาที"}
           </p>

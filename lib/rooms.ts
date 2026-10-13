@@ -54,7 +54,7 @@ export function statusOf(row: { placed_at: unknown; picked_at: unknown }): RoomS
   return "pending";
 }
 
-/** All rooms for one day, always in G01…G21 order, even if a row is missing. */
+/** All rooms for one day, always in configured order, even if a row is missing. */
 export async function getRoomsForDate(date: string): Promise<RoomView[]> {
   const rows = (await sql().query(
     `SELECT room_code, placed_by, placed_at, picked_by, picked_at, note
