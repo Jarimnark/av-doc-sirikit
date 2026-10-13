@@ -25,7 +25,7 @@ A small, phone-first web app for a 3-person team (นับทอง, หมิ�
    | `placed`    | วางแล้ว    | Document is in the room, waiting for pick-up  | Amber  |
    | `picked`    | เก็บแล้ว   | Document collected, room done for the day     | Green  |
 
-4. **Update with one tap.** Tap a room, then **วางเอกสารแล้ว** (placed) or **เก็บเอกสารแล้ว** (picked up). Who and when (server time, shown in Bangkok time) are recorded. **ยกเลิก** reverts a step if you tapped by mistake. An optional **โน้ต** field is there for things like "ห้องล็อก".
+4. **Update with one tap.** Tap a room, then **วางเอกสารแล้ว** (placed) or **เก็บเอกสารแล้ว** (picked up). Who and when are recorded. The time defaults to **ตอนนี้** (now, server time in Bangkok); choose **ระบุเวลา** to enter the actual time if you are recording it later (e.g. placed at 09:30, recorded at 10:00). A pick-up time can't be earlier than the placed time. **ยกเลิก** reverts a step if you tapped by mistake. An optional **โน้ต** field is there for things like "ห้องล็อก".
 5. **No double work.** If two people tap the same room at almost the same moment, the database lets only the first update through. The second person sees `ห้อง G09 วางแล้วโดย นับทอง เมื่อ 09:42` instead of silently overwriting it.
 6. **Stays in sync.** The board refreshes itself every 7 seconds and whenever the page comes back to the foreground.
 7. **Progress & filters.** `วางแล้ว 15/21 · เก็บแล้ว 9/21`, with filters ทั้งหมด / รอวาง / รอเก็บ / เสร็จแล้ว, plus a per-person tally.

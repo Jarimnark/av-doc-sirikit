@@ -51,6 +51,16 @@ function writeActor(name: string) {
   }
   actorListeners.forEach((cb) => cb());
 }
+/** Current wall-clock time in the working timezone as "HH:MM" (for <input type="time">). */
+function nowHHMM(timezone: string): string {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(new Date());
+}
+
 const serverSnapshot = () => null;
 const hydratedSnapshot = () => true;
 const notHydratedSnapshot = () => false;
@@ -64,6 +74,7 @@ type Props = {
   rooms: RoomView[];
   log: LogView[];
   members: string[];
+  timezone: string;
 };
 
 type Filter = "all" | RoomStatus;
@@ -94,7 +105,7 @@ const ACTION_LABEL: Record<LogView["action"], string> = {
   note: "บันทึกโน้ต",
 };
 
-export default function Board({ date, today, dates, rooms, log, members }: Props) {
+export default function Board({ date, today, dates, rooms, log, members, timezone }: Props) {
   const router = useRouter();
   const storedActor = useSyncExternalStore(subscribeActor, readActor, serverSnapshot);
   const actor = storedActor && members.includes(storedActor) ? storedActor : null;
@@ -168,16 +179,22 @@ export default function Board({ date, today, dates, rooms, log, members }: Props
 
   const run = useCallback(
     (
-      fn: (input: { room: string; date: string; actor: string }) => Promise<ActionResult>,
+      fn: (input: {
+        room: string;
+        date: string;
+        actor: string;
+        at?: string | null;
+      }) => Promise<ActionResult>,
       room: string,
       successText: string,
+      at: string | null = null,
     ) => {
       if (!actor) {
         setChoosingName(true);
         return;
       }
       startTransition(async () => {
-        const result = await fn({ room, date, actor });
+        const result = await fn({ room, date, actor, at });
         if (result.ok) setToast({ text: successText, kind: "ok" });
         else setToast({ text: result.message, kind: "error" });
         router.refresh();
@@ -349,9 +366,14 @@ export default function Board({ date, today, dates, rooms, log, members }: Props
           room={selectedRoom}
           log={selectedLog}
           busy={isPending}
+          timezone={timezone}
           onClose={() => setSelected(null)}
-          onPlace={() => run(placeDocument, selectedRoom.code, `วางเอกสารห้อง ${selectedRoom.code} แล้ว`)}
-          onPickup={() => run(pickupDocument, selectedRoom.code, `เก็บเอกสารห้อง ${selectedRoom.code} แล้ว`)}
+          onPlace={(at) =>
+            run(placeDocument, selectedRoom.code, `วางเอกสารห้อง ${selectedRoom.code} แล้ว`, at)
+          }
+          onPickup={(at) =>
+            run(pickupDocument, selectedRoom.code, `เก็บเอกสารห้อง ${selectedRoom.code} แล้ว`, at)
+          }
           onUndoPlace={() => run(undoPlace, selectedRoom.code, `ยกเลิกการวางห้อง ${selectedRoom.code}`)}
           onUndoPickup={() => run(undoPickup, selectedRoom.code, `ยกเลิกการเก็บห้อง ${selectedRoom.code}`)}
           onSaveNote={(note) => submitNote(selectedRoom.code, note)}
@@ -382,9 +404,10 @@ type SheetProps = {
   room: RoomView;
   log: LogView[];
   busy: boolean;
+  timezone: string;
   onClose: () => void;
-  onPlace: () => void;
-  onPickup: () => void;
+  onPlace: (at: string | null) => void;
+  onPickup: (at: string | null) => void;
   onUndoPlace: () => void;
   onUndoPickup: () => void;
   onSaveNote: (note: string) => void;
@@ -394,6 +417,7 @@ function RoomSheet({
   room,
   log,
   busy,
+  timezone,
   onClose,
   onPlace,
   onPickup,
@@ -401,6 +425,13 @@ function RoomSheet({
   onUndoPickup,
   onSaveNote,
 }: SheetProps) {
+  // When the action happened: right now (default) or a time the user picks,
+  // e.g. they placed the document at 09:30 but only record it at 10:00.
+  const [timeMode, setTimeMode] = useState<"now" | "custom">("now");
+  const [customTime, setCustomTime] = useState(() => nowHHMM(timezone));
+  const at = timeMode === "custom" ? customTime : null;
+  const canAct = timeMode === "now" || /^\d{2}:\d{2}$/.test(customTime);
+  const timeSuffix = at ? ` · ${at}` : "";
   // `draft` is only set while the user is typing; otherwise the field shows
   // whatever the server has, so other people's edits come through.
   const [draft, setDraft] = useState<string | null>(null);
@@ -443,16 +474,67 @@ function RoomSheet({
           </div>
         </dl>
 
-        <div className="mt-4 flex gap-2">
+        {room.status !== "picked" && (
+          <fieldset className="mt-4">
+            <legend className="text-xs font-medium text-zinc-500">เวลาที่ทำ</legend>
+            <div className="mt-1 flex items-center gap-2">
+              <div className="flex rounded-lg bg-zinc-100 p-0.5 text-sm">
+                <button
+                  type="button"
+                  onClick={() => setTimeMode("now")}
+                  className={`rounded-md px-3 py-1.5 font-medium ${
+                    timeMode === "now" ? "bg-white shadow-sm" : "text-zinc-600"
+                  }`}
+                >
+                  ตอนนี้
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTimeMode("custom");
+                    setCustomTime(nowHHMM(timezone));
+                  }}
+                  className={`rounded-md px-3 py-1.5 font-medium ${
+                    timeMode === "custom" ? "bg-white shadow-sm" : "text-zinc-600"
+                  }`}
+                >
+                  ระบุเวลา
+                </button>
+              </div>
+              {timeMode === "custom" && (
+                <input
+                  type="time"
+                  aria-label="เวลาที่ทำ"
+                  value={customTime}
+                  onChange={(e) => setCustomTime(e.target.value)}
+                  required
+                  className="rounded-lg border border-zinc-300 px-3 py-1.5 text-base tabular-nums"
+                />
+              )}
+            </div>
+          </fieldset>
+        )}
+
+        <div className="mt-3 flex gap-2">
           {room.status === "pending" && (
-            <button type="button" disabled={busy} onClick={onPlace} className={`${primary} bg-amber-500`}>
-              วางเอกสารแล้ว
+            <button
+              type="button"
+              disabled={busy || !canAct}
+              onClick={() => onPlace(at)}
+              className={`${primary} bg-amber-500`}
+            >
+              วางเอกสารแล้ว{timeSuffix}
             </button>
           )}
           {room.status === "placed" && (
             <>
-              <button type="button" disabled={busy} onClick={onPickup} className={`${primary} bg-emerald-600`}>
-                เก็บเอกสารแล้ว
+              <button
+                type="button"
+                disabled={busy || !canAct}
+                onClick={() => onPickup(at)}
+                className={`${primary} bg-emerald-600`}
+              >
+                เก็บเอกสารแล้ว{timeSuffix}
               </button>
               <button type="button" disabled={busy} onClick={onUndoPlace} className={secondary}>
                 ยกเลิกการวาง
@@ -503,7 +585,13 @@ function RoomSheet({
                   <span className="w-12 shrink-0 tabular-nums text-zinc-500">{l.time}</span>
                   <span>
                     <b>{l.actor}</b> {ACTION_LABEL[l.action]}
-                    {l.action === "note" && (l.note ? `: ${l.note}` : " (ลบโน้ต)")}
+                    {l.action === "note"
+                      ? l.note
+                        ? `: ${l.note}`
+                        : " (ลบโน้ต)"
+                      : l.note
+                        ? ` (${l.note})`
+                        : ""}
                   </span>
                 </li>
               ))}

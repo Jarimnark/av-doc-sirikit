@@ -1,7 +1,7 @@
 import { connection } from "next/server";
 import { Suspense } from "react";
 import Board from "@/components/Board";
-import { TEAM_MEMBERS } from "@/lib/config";
+import { TEAM_MEMBERS, TIMEZONE } from "@/lib/config";
 import {
   formatDayLabel,
   formatWeekday,
@@ -50,6 +50,7 @@ async function BoardLoader({
       rooms={rooms}
       log={log}
       members={[...TEAM_MEMBERS]}
+      timezone={TIMEZONE}
     />
   );
 }
