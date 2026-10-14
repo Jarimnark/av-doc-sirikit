@@ -1,5 +1,6 @@
 "use server";
 
+import { del } from "@vercel/blob";
 import { revalidatePath } from "next/cache";
 import { TIMEZONE, isValidMember, isValidRoom } from "@/lib/config";
 import { formatTime, isWorkingDate } from "@/lib/dates";
@@ -206,6 +207,73 @@ export async function saveNote(input: Input & { note: string }): Promise<ActionR
      SELECT room_code, work_date, 'note', $4, NULLIF($3, '') FROM changed
      RETURNING id`,
     [room, date, note, actor],
+  );
+  revalidatePath("/");
+  return { ok: true };
+}
+
+type DayNoteInput = { date: string; actor: string; note: string };
+
+/** Save (or clear) the author's day-wide note. Others see every member's note. */
+export async function saveDayNote(input: DayNoteInput): Promise<ActionResult> {
+  if (!isWorkingDate(input.date)) return { ok: false, message: "วันที่อยู่นอกช่วงงาน" };
+  if (!isValidMember(input.actor)) return { ok: false, message: "กรุณาเลือกชื่อของคุณก่อน" };
+  const note = input.note.trim().slice(0, 500);
+  const { date, actor } = input;
+
+  if (note === "") {
+    await sql().query(
+      `DELETE FROM day_notes WHERE work_date = $1::date AND author = $2`,
+      [date, actor],
+    );
+  } else {
+    await sql().query(
+      `INSERT INTO day_notes (work_date, author, note)
+       VALUES ($1::date, $2, $3)
+       ON CONFLICT (work_date, author) DO UPDATE
+         SET note = EXCLUDED.note, updated_at = now()`,
+      [date, actor, note],
+    );
+  }
+  // activity_log.room_code is NOT NULL; use '' as a sentinel for day-wide events.
+  await sql().query(
+    `INSERT INTO activity_log (room_code, work_date, action, actor, note)
+     VALUES ('', $1::date, 'day_note', $2, NULLIF($3, ''))`,
+    [date, actor, note],
+  );
+  revalidatePath("/");
+  return { ok: true };
+}
+
+type DeletePhotoInput = { id: number; date: string; actor: string };
+
+/** Delete a document photo (Vercel Blob + DB row + log). */
+export async function deletePhoto(input: DeletePhotoInput): Promise<ActionResult> {
+  if (!isWorkingDate(input.date)) return { ok: false, message: "วันที่อยู่นอกช่วงงาน" };
+  if (!isValidMember(input.actor)) return { ok: false, message: "กรุณาเลือกชื่อของคุณก่อน" };
+  const { id, date, actor } = input;
+
+  const rows = (await sql().query(
+    `SELECT room_code, pathname FROM room_photos
+      WHERE id = $1 AND work_date = $2::date`,
+    [id, date],
+  )) as { room_code: string; pathname: string }[];
+  const row = rows[0];
+  if (!row) return { ok: false, message: "ไม่พบรูปนี้แล้ว" };
+
+  // Best-effort Blob removal: if the blob is already gone, keep going so the
+  // DB row doesn't get stuck.
+  try {
+    await del(row.pathname);
+  } catch {
+    /* ignored — the DB row removal is the source of truth for the UI */
+  }
+
+  await sql().query(`DELETE FROM room_photos WHERE id = $1`, [id]);
+  await sql().query(
+    `INSERT INTO activity_log (room_code, work_date, action, actor, note)
+     VALUES ($1, $2::date, 'photo_delete', $3, $4)`,
+    [row.room_code, date, actor, row.pathname],
   );
   revalidatePath("/");
   return { ok: true };

@@ -11,14 +11,16 @@ import {
   useTransition,
 } from "react";
 import {
+  deletePhoto,
   pickupDocument,
   placeDocument,
+  saveDayNote,
   saveNote,
   undoPickup,
   undoPlace,
   type ActionResult,
 } from "@/app/actions";
-import type { LogView, RoomStatus, RoomView } from "@/lib/rooms";
+import type { DayNote, LogView, RoomPhoto, RoomStatus, RoomView } from "@/lib/rooms";
 import NamePicker from "./NamePicker";
 
 const ACTOR_KEY = "avdoc.actor";
@@ -73,6 +75,8 @@ type Props = {
   dates: DateTab[];
   rooms: RoomView[];
   log: LogView[];
+  photos: Record<string, RoomPhoto[]>;
+  dayNotes: DayNote[];
   members: string[];
   timezone: string;
 };
@@ -103,9 +107,22 @@ const ACTION_LABEL: Record<LogView["action"], string> = {
   undo_place: "ยกเลิกการวาง",
   undo_pickup: "ยกเลิกการเก็บ",
   note: "บันทึกโน้ต",
+  day_note: "บันทึกโน้ตประจำวัน",
+  photo_add: "อัปโหลดรูป",
+  photo_delete: "ลบรูป",
 };
 
-export default function Board({ date, today, dates, rooms, log, members, timezone }: Props) {
+export default function Board({
+  date,
+  today,
+  dates,
+  rooms,
+  log,
+  photos,
+  dayNotes,
+  members,
+  timezone,
+}: Props) {
   const router = useRouter();
   const storedActor = useSyncExternalStore(subscribeActor, readActor, serverSnapshot);
   const actor = storedActor && members.includes(storedActor) ? storedActor : null;
@@ -222,6 +239,76 @@ export default function Board({ date, today, dates, rooms, log, members, timezon
     [actor, date, router],
   );
 
+  const submitDayNote = useCallback(
+    (note: string) => {
+      if (!actor) {
+        setChoosingName(true);
+        return;
+      }
+      startTransition(async () => {
+        const result = await saveDayNote({ date, actor, note });
+        setToast(
+          result.ok
+            ? { text: note.trim() ? "บันทึกโน้ตประจำวันแล้ว" : "ลบโน้ตประจำวันแล้ว", kind: "ok" }
+            : { text: result.message, kind: "error" },
+        );
+        router.refresh();
+      });
+    },
+    [actor, date, router],
+  );
+
+  const removePhoto = useCallback(
+    (id: number) => {
+      if (!actor) {
+        setChoosingName(true);
+        return;
+      }
+      startTransition(async () => {
+        const result = await deletePhoto({ id, date, actor });
+        setToast(
+          result.ok
+            ? { text: "ลบรูปแล้ว", kind: "ok" }
+            : { text: result.message, kind: "error" },
+        );
+        router.refresh();
+      });
+    },
+    [actor, date, router],
+  );
+
+  const uploadPhoto = useCallback(
+    (room: string, file: File) => {
+      if (!actor) {
+        setChoosingName(true);
+        return;
+      }
+      startTransition(async () => {
+        const form = new FormData();
+        form.set("room", room);
+        form.set("date", date);
+        form.set("actor", actor);
+        form.set("file", file);
+        try {
+          const res = await fetch("/api/photos", { method: "POST", body: form });
+          const data = (await res.json().catch(() => ({}))) as {
+            ok?: boolean;
+            message?: string;
+          };
+          if (!res.ok || !data.ok) {
+            setToast({ text: data.message || "อัปโหลดรูปไม่สำเร็จ", kind: "error" });
+          } else {
+            setToast({ text: `อัปโหลดรูปห้อง ${room} แล้ว`, kind: "ok" });
+          }
+        } catch {
+          setToast({ text: "อัปโหลดรูปไม่สำเร็จ", kind: "error" });
+        }
+        router.refresh();
+      });
+    },
+    [actor, date, router],
+  );
+
   const total = rooms.length;
   const placedOrMore = counts.placed + counts.picked;
 
@@ -320,15 +407,22 @@ export default function Board({ date, today, dates, rooms, log, members, timezon
             key={room.code}
             type="button"
             onClick={() => setSelected(room.code)}
-            className={`flex min-h-24 flex-col items-start rounded-xl border p-2.5 text-left shadow-sm transition active:scale-[0.97] ${STATUS_CARD[room.status]}`}
+            className={`flex min-h-24 w-full min-w-0 flex-col items-start overflow-hidden rounded-xl border p-2.5 text-left shadow-sm transition active:scale-[0.97] ${STATUS_CARD[room.status]}`}
           >
-            <div className="flex w-full items-center justify-between">
-              <span className="text-base font-bold tracking-wide">{room.code}</span>
-              <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${STATUS_CHIP[room.status]}`}>
-                {STATUS_LABEL[room.status]}
-              </span>
+            <div className="flex w-full min-w-0 items-center justify-between gap-1">
+              <span className="truncate text-base font-bold tracking-wide">{room.code}</span>
+              <div className="flex shrink-0 items-center gap-1">
+                {room.photoCount > 0 && (
+                  <span className="rounded-full bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800">
+                    📷 {room.photoCount}
+                  </span>
+                )}
+                <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${STATUS_CHIP[room.status]}`}>
+                  {STATUS_LABEL[room.status]}
+                </span>
+              </div>
             </div>
-            <div className="mt-1.5 space-y-0.5 text-[11px] leading-tight">
+            <div className="mt-1.5 w-full min-w-0 space-y-0.5 text-[11px] leading-tight">
               {room.placedBy && (
                 <div className="truncate">
                   วาง · {room.placedBy} {room.placedAt}
@@ -360,11 +454,22 @@ export default function Board({ date, today, dates, rooms, log, members, timezon
         ))}
       </section>
 
+      {/* Day-wide notes (one per person per day, visible to everyone) */}
+      <DayNotesPanel
+        notes={dayNotes}
+        actor={actor}
+        members={members}
+        busy={isPending}
+        onSave={submitDayNote}
+        onNeedActor={() => setChoosingName(true)}
+      />
+
       {/* Room sheet */}
       {selectedRoom && (
         <RoomSheet
           room={selectedRoom}
           log={selectedLog}
+          photos={photos[selectedRoom.code] ?? []}
           busy={isPending}
           timezone={timezone}
           onClose={() => setSelected(null)}
@@ -377,6 +482,8 @@ export default function Board({ date, today, dates, rooms, log, members, timezon
           onUndoPlace={() => run(undoPlace, selectedRoom.code, `ยกเลิกการวางห้อง ${selectedRoom.code}`)}
           onUndoPickup={() => run(undoPickup, selectedRoom.code, `ยกเลิกการเก็บห้อง ${selectedRoom.code}`)}
           onSaveNote={(note) => submitNote(selectedRoom.code, note)}
+          onUploadPhoto={(file) => uploadPhoto(selectedRoom.code, file)}
+          onDeletePhoto={removePhoto}
         />
       )}
 
@@ -403,6 +510,7 @@ export default function Board({ date, today, dates, rooms, log, members, timezon
 type SheetProps = {
   room: RoomView;
   log: LogView[];
+  photos: RoomPhoto[];
   busy: boolean;
   timezone: string;
   onClose: () => void;
@@ -411,11 +519,16 @@ type SheetProps = {
   onUndoPlace: () => void;
   onUndoPickup: () => void;
   onSaveNote: (note: string) => void;
+  onUploadPhoto: (file: File) => void;
+  onDeletePhoto: (id: number) => void;
 };
+
+const MAX_PHOTOS = 2;
 
 function RoomSheet({
   room,
   log,
+  photos,
   busy,
   timezone,
   onClose,
@@ -424,6 +537,8 @@ function RoomSheet({
   onUndoPlace,
   onUndoPickup,
   onSaveNote,
+  onUploadPhoto,
+  onDeletePhoto,
 }: SheetProps) {
   // When the action happened: right now (default) or a time the user picks,
   // e.g. they placed the document at 09:30 but only record it at 10:00.
@@ -574,6 +689,13 @@ function RoomSheet({
           </div>
         </form>
 
+        <RoomPhotosSection
+          photos={photos}
+          busy={busy}
+          onUpload={onUploadPhoto}
+          onDelete={onDeletePhoto}
+        />
+
         <section className="mt-4">
           <h3 className="text-xs font-medium text-zinc-500">ประวัติวันนี้</h3>
           {log.length === 0 ? (
@@ -600,5 +722,184 @@ function RoomSheet({
         </section>
       </div>
     </div>
+  );
+}
+
+type DayNotesPanelProps = {
+  notes: DayNote[];
+  actor: string | null;
+  members: string[];
+  busy: boolean;
+  onSave: (note: string) => void;
+  onNeedActor: () => void;
+};
+
+function DayNotesPanel(props: DayNotesPanelProps) {
+  // Reset local draft when the actor changes by remounting via `key`.
+  return <DayNotesPanelInner key={props.actor ?? ""} {...props} />;
+}
+
+function DayNotesPanelInner({
+  notes,
+  actor,
+  members,
+  busy,
+  onSave,
+  onNeedActor,
+}: DayNotesPanelProps) {
+  const own = actor ? notes.find((n) => n.author === actor) : null;
+  const serverNote = own?.note ?? "";
+  const [draft, setDraft] = useState<string | null>(null);
+  const value = draft ?? serverNote;
+  const others = notes.filter((n) => n.author !== actor);
+  const missing = members.filter((m) => !notes.some((n) => n.author === m) && m !== actor);
+
+  return (
+    <section className="mt-4 rounded-2xl border border-zinc-200 bg-white p-3 shadow-sm">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold">โน้ตประจำวัน</h2>
+        <span className="text-[11px] text-zinc-500">หนึ่งข้อความต่อคนต่อวัน</span>
+      </div>
+
+      <form
+        className="mt-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (!actor) {
+            onNeedActor();
+            return;
+          }
+          onSave(value);
+          setDraft(null);
+        }}
+      >
+        <label className="text-[11px] text-zinc-500" htmlFor="day-note">
+          {actor
+            ? own
+              ? `โน้ตของ ${actor} · อัปเดต ${own.updatedAt}`
+              : `โน้ตของ ${actor}`
+            : "เลือกชื่อก่อนเขียนโน้ต"}
+        </label>
+        <div className="mt-1 flex gap-2">
+          <input
+            id="day-note"
+            value={value}
+            onChange={(e) => setDraft(e.target.value)}
+            maxLength={500}
+            disabled={!actor}
+            placeholder={actor ? "เช่น วันนี้มาสาย 10 โมง" : "ยังไม่ได้เลือกชื่อ"}
+            className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 text-sm disabled:bg-zinc-50 disabled:text-zinc-400"
+          />
+          <button
+            type="submit"
+            disabled={busy || !actor || value === serverNote}
+            className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 disabled:opacity-50"
+          >
+            บันทึก
+          </button>
+        </div>
+      </form>
+
+      {(others.length > 0 || missing.length > 0) && (
+        <ul className="mt-3 space-y-1.5 text-sm">
+          {others.map((n) => (
+            <li
+              key={n.author}
+              className="flex items-start gap-2 rounded-lg bg-zinc-50 px-3 py-2"
+            >
+              <span className="shrink-0 text-xs font-semibold text-zinc-700">
+                {n.author} · {n.updatedAt}
+              </span>
+              <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-zinc-800">
+                {n.note}
+              </span>
+            </li>
+          ))}
+          {missing.map((name) => (
+            <li key={name} className="px-3 text-xs text-zinc-400">
+              {name} ยังไม่ได้ฝากโน้ต
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+type RoomPhotosSectionProps = {
+  photos: RoomPhoto[];
+  busy: boolean;
+  onUpload: (file: File) => void;
+  onDelete: (id: number) => void;
+};
+
+function RoomPhotosSection({ photos, busy, onUpload, onDelete }: RoomPhotosSectionProps) {
+  const canUpload = photos.length < MAX_PHOTOS;
+  return (
+    <section className="mt-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-medium text-zinc-500">
+          รูปเอกสาร ({photos.length}/{MAX_PHOTOS})
+        </h3>
+        {canUpload && (
+          <label
+            className={`cursor-pointer rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm ${
+              busy ? "opacity-50" : "hover:bg-zinc-50"
+            }`}
+          >
+            + เพิ่มรูป
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              className="hidden"
+              disabled={busy}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (file) onUpload(file);
+              }}
+            />
+          </label>
+        )}
+      </div>
+      {photos.length === 0 ? (
+        <p className="mt-1 text-sm text-zinc-400">ยังไม่มีรูป</p>
+      ) : (
+        <ul className="mt-2 grid grid-cols-2 gap-2">
+          {photos.map((p) => (
+            <li
+              key={p.id}
+              className="group relative overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50"
+            >
+              <a href={p.url} target="_blank" rel="noreferrer" className="block">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={p.url}
+                  alt={`photo by ${p.uploadedBy}`}
+                  className="aspect-square w-full object-cover"
+                  loading="lazy"
+                />
+              </a>
+              <div className="flex items-center justify-between gap-2 px-2 py-1 text-[11px] text-zinc-600">
+                <span className="truncate">
+                  {p.uploadedBy} · {p.time}
+                </span>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    if (confirm("ลบรูปนี้?")) onDelete(p.id);
+                  }}
+                  className="shrink-0 rounded px-1.5 py-0.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                >
+                  ลบ
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }

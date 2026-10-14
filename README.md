@@ -117,14 +117,15 @@ RETURNING id;                                   -- 0 rows => someone else was fi
 
 Copy `.env.example` to `.env.local` for local development. On Vercel, set the same values under *Project Settings → Environment Variables*.
 
-| Variable       | Default                | Notes                                              |
-| -------------- | ---------------------- | -------------------------------------------------- |
-| `DATABASE_URL` | —                      | Required. Set automatically by the Neon integration |
-| `TEAM_MEMBERS` | `นับทอง,หมิว,รัน`       | Comma-separated names for the chooser              |
-| `START_DATE`   | `2026-10-13`           | First working day                                  |
-| `END_DATE`     | `2026-10-20`           | Last working day                                   |
-| `ROOMS`        | `G01,…,G17,G19,…,G22`  | Comma-separated room codes in display order (G18 excluded) |
-| `TIMEZONE`     | `Asia/Bangkok`         | Decides "today" and how times are shown            |
+| Variable                | Default                | Notes                                                         |
+| ----------------------- | ---------------------- | ------------------------------------------------------------- |
+| `DATABASE_URL`          | —                      | Required. Set automatically by the Neon integration           |
+| `BLOB_READ_WRITE_TOKEN` | —                      | Required for photo uploads. From the Vercel Blob store        |
+| `TEAM_MEMBERS`          | `นับทอง,หมิว,รัน`       | Comma-separated names for the chooser                         |
+| `START_DATE`            | `2026-10-13`           | First working day                                             |
+| `END_DATE`              | `2026-10-20`           | Last working day                                              |
+| `ROOMS`                 | `G01,…,G17,G19,…,G22`  | Comma-separated room codes in display order (G18 excluded)    |
+| `TIMEZONE`              | `Asia/Bangkok`         | Decides "today" and how times are shown                       |
 
 `NEON_FETCH_ENDPOINT` exists only for local testing against a stand-in HTTP endpoint; leave it unset in production.
 
