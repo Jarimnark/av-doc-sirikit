@@ -9,7 +9,12 @@ import {
   todayInZone,
   workingDates,
 } from "@/lib/dates";
-import { getLogForDate, getRoomsForDate } from "@/lib/rooms";
+import {
+  getDayNotes,
+  getLogForDate,
+  getPhotosForDate,
+  getRoomsForDate,
+} from "@/lib/rooms";
 
 export default function Page(props: PageProps<"/">) {
   return (
@@ -31,9 +36,11 @@ async function BoardLoader({
   const requested = typeof params.date === "string" ? params.date : undefined;
   const date = resolveDate(requested);
 
-  const [rooms, log] = await Promise.all([
+  const [rooms, log, photos, dayNotes] = await Promise.all([
     getRoomsForDate(date),
     getLogForDate(date),
+    getPhotosForDate(date),
+    getDayNotes(date),
   ]);
 
   const dates = workingDates().map((value) => ({
@@ -49,6 +56,8 @@ async function BoardLoader({
       dates={dates}
       rooms={rooms}
       log={log}
+      photos={photos}
+      dayNotes={dayNotes}
       members={[...TEAM_MEMBERS]}
       timezone={TIMEZONE}
     />
